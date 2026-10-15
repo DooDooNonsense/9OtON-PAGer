@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tier Poll</title>
+<style>
+/* Layout: one centered column. Home, host menu and join are simple stacked screens; the room screen shows the host console or the guest vote card above the tier board. */
+:root{
+  color-scheme:light;
+  --bg:#edf0f4; --panel:#ffffff; --panel-2:#e2e7ee; --line:#cdd5df;
+  --fg:#121c2b; --muted:#566376; --accent:#2c56e8; --accent-fg:#ffffff;
+  --danger:#b83232; --on-tier:#101820;
+  --t-S:#ec5b5f; --t-A:#f2933a; --t-B:#ecc81f; --t-C:#68bf6b; --t-D:#45a6dc; --t-E:#9a82e0; --t-F:#9aa4b4;
+  --font-display:'Helvetica Neue',Helvetica,Arial,sans-serif;
+  --font-body:'Helvetica Neue',Helvetica,Arial,sans-serif;
+  --font-mono:'Helvetica Neue',Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    color-scheme:dark;
+    --bg:#0e131b; --panel:#161d28; --panel-2:#212a39; --line:#2d384a;
+    --fg:#e6ecf5; --muted:#95a3b8; --accent:#7da0ff; --accent-fg:#0e131b; --danger:#ff8a8a;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--fg); font-family:var(--font-body); font-size:16px; line-height:1.45;
+  padding-block:max(20px,env(safe-area-inset-top,0px)) max(48px,env(safe-area-inset-bottom,0px));
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+[hidden]{display:none!important}
+img{max-width:100%}
+.wrap{max-width:880px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.stack{display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--font-display);margin:0;text-wrap:balance;line-height:1.1}
+h1{font-size:1.9rem;font-weight:800}
+h2{font-size:1.15rem;font-weight:800}
+.muted{color:var(--muted)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.label{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:9px 14px;border-radius:8px;min-height:44px;cursor:pointer}
+.btn:hover:not(:disabled){border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.btn.big{min-height:84px;font-family:var(--font-display);font-size:1.6rem;font-weight:800}
+.btn.small{min-height:36px;padding:6px 10px;font-size:.9rem}
+.btn.danger{color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+:is(.btn,.tier-btn,select,textarea,input):focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.pill{display:inline-block;font-family:var(--font-mono);font-size:.75rem;letter-spacing:.06em;padding:3px 9px;border-radius:999px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted)}
+.pill.open{background:var(--accent);color:var(--accent-fg);border-color:transparent}
+.notice{border:1px dashed var(--line);border-radius:8px;padding:10px 12px;color:var(--muted);font-size:.92rem}
+.notice.err{border-color:var(--danger);color:var(--danger)}
+.notice.key{border:2px solid var(--accent);color:var(--fg);display:flex;flex-direction:column;gap:8px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:520px){.split{grid-template-columns:1fr}}
+
+/* code entry */
+.code-in{font-family:var(--font-mono);font-weight:500;font-size:2rem;letter-spacing:.35em;text-transform:uppercase;text-align:center;width:100%;min-height:64px;padding:8px 8px 8px calc(8px + .35em);color:var(--fg);background:var(--panel);border:2px solid var(--line);border-radius:10px}
+.code-in::placeholder{letter-spacing:.2em;opacity:.35}
+.code-big{font-family:var(--font-mono);font-weight:500;font-size:2.4rem;letter-spacing:.3em;line-height:1}
+.roombar{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:center;justify-content:space-between}
+.codebox{display:flex;flex-direction:column;gap:4px;min-width:0}
+.codebox .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.code-mid{font-family:var(--font-mono);font-weight:500;font-size:1.3rem;letter-spacing:.25em}
+
+/* live console */
+.now{display:flex;flex-direction:column;gap:12px}
+.now-name{font-family:var(--font-display);font-weight:800;font-size:2.2rem;line-height:1.05;overflow-wrap:anywhere}
+.now-head{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.now-img{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+.say{background:var(--panel-2);border-radius:8px;padding:10px 12px;font-size:.95rem}
+.bars{display:flex;flex-direction:column;gap:6px}
+.bar-row{display:grid;grid-template-columns:28px 1fr 40px;gap:10px;align-items:center}
+.bar-tier{font-family:var(--font-display);font-weight:800;text-align:center;background:var(--tc);color:var(--on-tier);border-radius:6px;padding:2px 0}
+.bar-track{background:var(--panel-2);border-radius:6px;height:16px;overflow:hidden}
+.bar-fill{height:100%;background:var(--tc);width:0}
+.bar-n{text-align:right}
+
+/* queue */
+.queue{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.q-row{display:grid;grid-template-columns:auto auto 1fr;gap:10px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:10px}
+.q-row.live{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.q-no{color:var(--muted);font-size:.85rem;min-width:2.2ch}
+.q-thumb{width:44px;height:44px;border-radius:8px;object-fit:cover;background:var(--panel-2);border:1px solid var(--line)}
+.q-main{min-width:0;display:flex;flex-direction:column;gap:8px}
+.q-title{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.q-name{font-weight:600;overflow-wrap:anywhere}
+.q-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tag{font-family:var(--font-display);font-weight:800;min-width:28px;text-align:center;padding:1px 8px;border-radius:6px;background:var(--tc);color:var(--on-tier)}
+.text-in{font:inherit;width:100%;min-height:48px;padding:8px 12px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px}
+select,textarea{font:inherit;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px}
+select{min-height:36px;padding:4px 8px}
+textarea{width:100%;min-height:120px;padding:10px;resize:vertical}
+
+/* vote card */
+.vote-name{font-family:var(--font-display);font-weight:800;font-size:2.4rem;line-height:1.05;overflow-wrap:anywhere}
+.vote-img{width:100%;max-width:360px;max-height:260px;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+.tier-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media (min-width:640px){.tier-grid{grid-template-columns:repeat(7,1fr)}}
+.tier-btn{font-family:var(--font-display);font-weight:800;font-size:2rem;min-height:76px;border-radius:12px;border:3px solid transparent;background:var(--tc);color:var(--on-tier);cursor:pointer}
+.tier-btn:disabled{cursor:not-allowed}
+.tier-btn[aria-pressed="true"]{border-color:var(--fg);box-shadow:0 0 0 3px var(--panel)}
+.has-pick .tier-btn[aria-pressed="false"]{opacity:.5}
+.result-tier{font-family:var(--font-display);font-weight:800;font-size:3.4rem;line-height:1;padding:8px 22px;border-radius:12px;background:var(--tc);color:var(--on-tier);align-self:flex-start}
+
+/* tier board */
+.board{display:flex;flex-direction:column;gap:6px}
+.t-row{display:grid;grid-template-columns:56px 1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel);min-height:56px}
+.t-label{display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-weight:800;font-size:1.7rem;background:var(--tc);color:var(--on-tier)}
+.t-items{display:flex;flex-wrap:wrap;gap:6px;padding:8px;align-content:center;min-width:0}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel-2);border-radius:8px;padding:4px 10px 4px 4px;font-size:.92rem;max-width:100%}
+.chip img{width:28px;height:28px;border-radius:6px;object-fit:cover}
+.chip.noimg{padding-left:10px}
+.chip span{overflow-wrap:anywhere}
+.empty{color:var(--muted);padding:6px 4px;font-size:.92rem}
+@media (prefers-reduced-motion:no-preference){.bar-fill{transition:width .25s ease}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HOME -->
+  <section id="screen-home" class="stack">
+    <h1>Tier Poll</h1>
+    <p class="muted" style="margin:0">Rank anything from S to F with a group, one poll at a time.</p>
+    <div class="split">
+      <button class="btn primary big" id="go-host" type="button">Hosting</button>
+      <button class="btn big" id="go-join" type="button">Joining</button>
+    </div>
+  </section>
+
+  <!-- HOST MENU -->
+  <section id="screen-hostmenu" class="stack" hidden>
+    <h1>Hosting</h1>
+    <div class="panel">
+      <h2>Start a new room</h2>
+      <p class="muted" style="margin:0">You get a 6-character host code to keep, and a 4-character code for your guests.</p>
+      <label class="muted" for="new-name">Room name (optional)</label>
+      <input class="text-in" id="new-name" maxlength="60" placeholder="Name your room" autocomplete="off">
+      <div class="actions"><button class="btn primary" id="new-room" type="button">Start a new room</button></div>
+    </div>
+    <form class="panel" id="host-form" autocomplete="off">
+      <h2>Return to a room</h2>
+      <label class="muted" for="host-code">Your 6-character host code</label>
+      <input class="code-in" id="host-code" maxlength="6" placeholder="••••••" autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="text">
+      <div class="actions"><button class="btn primary" type="submit">Enter room</button></div>
+    </form>
+    <div id="host-msg" hidden></div>
+    <div class="actions"><button class="btn small back" type="button">Back</button></div>
+  </section>
+
+  <!-- JOIN -->
+  <section id="screen-join" class="stack" hidden>
+    <h1>Joining</h1>
+    <form class="panel" id="join-form" autocomplete="off">
+      <label class="muted" for="join-code">Enter the 4-character code from the host</label>
+      <input class="code-in" id="join-code" maxlength="4" placeholder="••••" autocapitalize="characters" autocomplete="off" spellcheck="false" inputmode="text">
+      <div class="actions"><button class="btn primary" type="submit">Join</button></div>
+    </form>
+    <div id="join-msg" hidden></div>
+    <div class="actions"><button class="btn small back" type="button">Back</button></div>
+  </section>
+
+  <!-- ROOM -->
+  <section id="screen-room" class="stack" hidden>
+    <h1 id="room-title">Tier Poll</h1>
+    <div class="panel">
+      <div class="roombar" id="roombar"></div>
+    </div>
+    <div id="msg" hidden></div>
+    <section class="panel" id="vote-panel" hidden aria-live="polite"></section>
+    <div id="host-area" class="stack" hidden>
+      <section class="panel" id="console" aria-live="polite"></section>
+      <section class="panel">
+        <h2>Queue</h2>
+        <ol class="queue" id="queue"></ol>
+      </section>
+      <section class="panel">
+        <h2>Add items</h2>
+        <label class="muted" for="item-input">One item per line. You can also load a .txt or .csv file (first column is used).</label>
+        <textarea id="item-input" placeholder="First item&#10;Second item&#10;Third item"></textarea>
+        <div class="actions">
+          <button class="btn primary" id="add-btn" type="button">Add to queue</button>
+          <button class="btn" id="file-btn" type="button">Load a file</button>
+          <input type="file" id="file-input" accept=".txt,.csv,text/plain,text/csv" hidden>
+        </div>
+      </section>
+      <form class="panel" id="name-form" autocomplete="off">
+        <h2>Room name</h2>
+        <label class="muted" for="room-name">Shown to everyone in the room. You can change it any time.</label>
+        <input class="text-in" id="room-name" maxlength="60" placeholder="Name your room">
+        <div class="actions"><button class="btn" type="submit">Save name</button></div>
+      </form>
+    </div>
+    <section class="panel">
+      <h2>Tier board</h2>
+      <div class="board" id="board"></div>
+    </section>
+  </section>
+</div>
+
+<script>
+(function(){
+'use strict';
+var TIERS=['S','A','B','C','D','E','F'];
+var S={role:null,hc:null,jc:null,data:null,local:{},msg:'',msgErr:false,busy:false,connLost:false,
+  confirmRemove:null,audienceView:false,showHostCode:false,justCreated:false,es:null};
+var $=function(id){return document.getElementById(id);};
+function store(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v);}catch(e){}return null;}
+var memCid=null;
+function getCid(){
+  var c=store('btp_cid');
+  if(c&&/^[A-Za-z0-9-]{8,64}$/.test(c))return c;
+  var a=new Uint8Array(12);
+  try{crypto.getRandomValues(a);}catch(e){for(var i=0;i<12;i++)a[i]=Math.floor(Math.random()*256);}
+  c=Array.prototype.map.call(a,function(x){return ('0'+x.toString(16)).slice(-2);}).join('');
+  store('btp_cid',c);memCid=c;return c;
+}
+
+function put(parent){
+  for(var i=1;i<arguments.length;i++){var c=arguments[i];if(c==null||c===false)continue;parent.append(c);}
+}
+function h(tag,attrs){
+  var e=document.createElement(tag);
+  attrs=attrs||{};
+  Object.keys(attrs).forEach(function(k){
+    var v=attrs[k];
+    if(v===false||v==null)return;
+    if(k==='class')e.className=v;
+    else if(k==='text')e.textContent=v;
+    else if(k==='tc')e.style.setProperty('--tc','var(--t-'+v+')');
+    else if(k.slice(0,2)==='on')e.addEventListener(k.slice(2),v);
+    else e.setAttribute(k,v===true?'':v);
+  });
+  for(var i=2;i<arguments.length;i++){
+    var kids=[].concat(arguments[i]);
+    for(var j=0;j<kids.length;j++){var c=kids[j];if(c==null||c===false)continue;e.append(c.nodeType?c:document.createTextNode(String(c)));}
+  }
+  return e;
+}
+async function api(method,url,body){
+  var r=await fetch(url,{method:method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  var j={};try{j=await r.json();}catch(e){}
+  if(!r.ok)throw new Error(j.error||'Something went wrong. Try again.');
+  return j;
+}
+function copy(text,btn){
+  var done=function(){var o=btn.textContent;btn.textContent='Copied';setTimeout(function(){btn.textContent=o;},1200);};
+  try{navigator.clipboard.writeText(text).then(done,function(){});}catch(e){}
+}
+
+/* ---------- screens ---------- */
+function show(name){
+  ['home','hostmenu','join','room'].forEach(function(n){$('screen-'+n).hidden=(n!==name);});
+  window.scrollTo(0,0);
+}
+function leave(){
+  if(S.es){S.es.close();S.es=null;}
+  S.role=null;S.hc=null;S.jc=null;S.data=null;S.local={};S.msg='';S.connLost=false;S.audienceView=false;S.justCreated=false;S.showHostCode=false;
+  nameDirty=false;$('room-name').value='';document.title='Tier Poll';
+  try{history.replaceState(null,'',location.pathname);}catch(e){}
+  show('home');
+}
+function setFormMsg(id,text){var m=$(id);m.hidden=!text;m.className='notice err';m.textContent=text||'';}
+
+/* ---------- connecting ---------- */
+var nameDirty=false;
+function applyName(){
+  var n=(S.data&&S.data.name)||'';
+  $('room-title').textContent=n||'Tier Poll';
+  document.title=n||'Tier Poll';
+  var f=$('room-name');
+  if(f&&!nameDirty&&document.activeElement!==f)f.value=n;
+}
+function connect(){
+  if(S.es)S.es.close();
+  var url=S.role==='host'?'/api/host/'+S.hc+'/events':'/api/join/'+S.jc+'/events?cid='+encodeURIComponent(getCid());
+  var es=new EventSource(url);
+  S.es=es;
+  es.onopen=function(){if(S.connLost){S.connLost=false;renderAll();}};
+  es.onmessage=function(ev){
+    try{S.data=JSON.parse(ev.data);}catch(e){return;}
+    S.connLost=false;applyName();renderAll();
+  };
+  es.onerror=function(){S.connLost=true;renderMsg();};
+}
+function enterHost(hc){
+  S.role='host';S.hc=hc;S.data=null;S.audienceView=false;S.showHostCode=false;
+  store('btp_host',hc);
+  show('room');renderAll();connect();
+}
+function enterGuest(jc){
+  S.role='guest';S.jc=jc;S.data=null;S.local={};
+  store('btp_join',jc);
+  try{history.replaceState(null,'','#'+jc);}catch(e){}
+  show('room');renderAll();connect();
+}
+
+/* ---------- host actions ---------- */
+async function act(payload){
+  if(S.busy)return;
+  S.busy=true;S.msg='';renderAll();
+  try{await api('POST','/api/host/'+S.hc+'/action',payload);}
+  catch(e){S.msg=e.message;S.msgErr=true;}
+  S.busy=false;renderAll();
+}
+function curItem(){var d=S.data;if(!d||!d.live.itemId)return null;return d.items.find(function(b){return b.id===d.live.itemId;})||null;}
+function nextItem(){
+  var d=S.data;if(!d)return null;
+  return d.items.find(function(b){return !b.final&&!(d.live.open&&d.live.itemId===b.id);})||null;
+}
+function removeItem(id){
+  if(S.confirmRemove!==id){S.confirmRemove=id;renderQueue();return;}
+  S.confirmRemove=null;act({type:'remove',id:id});
+}
+function addItems(){
+  var names=$('item-input').value.split(/\r?\n/).map(function(l){return l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/,'').trim();}).filter(Boolean);
+  if(!names.length){S.msg='Type or paste at least one item.';S.msgErr=false;renderMsg();return;}
+  act({type:'add',names:names}).then(function(){if(!S.msgErr)$('item-input').value='';});
+}
+function resizeImage(file){
+  return new Promise(function(res,rej){
+    var r=new FileReader();r.onerror=rej;
+    r.onload=function(){
+      var im=new Image();im.onerror=rej;
+      im.onload=function(){
+        var m=480,s=Math.min(1,m/Math.max(im.width,im.height));
+        var c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);
+        c.getContext('2d').drawImage(im,0,0,c.width,c.height);
+        res(c.toDataURL('image/jpeg',0.72));
+      };
+      im.src=r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+function pickPhoto(b){
+  var inp=document.createElement('input');inp.type='file';inp.accept='image/*';
+  inp.addEventListener('change',function(){
+    var f=inp.files&&inp.files[0];if(!f)return;
+    resizeImage(f).then(function(url){act({type:'image',id:b.id,dataUrl:url});})
+      .catch(function(){S.msg='That image could not be read.';S.msgErr=true;renderMsg();});
+  });
+  inp.click();
+}
+
+/* ---------- guest action ---------- */
+var chain=Promise.resolve();
+function vote(tier){
+  var d=S.data;if(!d||!d.live.open||!d.live.itemId||S.role!=='guest')return;
+  var id=d.live.itemId;
+  S.local[id]=tier;renderVote();
+  chain=chain.then(function(){
+    return api('POST','/api/join/'+S.jc+'/vote',{cid:getCid(),itemId:id,tier:tier});
+  }).catch(function(e){
+    delete S.local[id];S.msg=e.message;S.msgErr=true;renderAll();
+  });
+}
+function myPick(id){return S.local[id]||(S.data&&S.data.mine&&S.data.mine[id])||null;}
+
+/* ---------- rendering ---------- */
+function renderAll(){renderMsg();renderRoomBar();renderVote();renderConsole();renderQueue();renderBoard();}
+function renderMsg(){
+  var m=$('msg');
+  var text=S.connLost?'Connection lost. Trying to reconnect…':S.msg;
+  if(!text){m.hidden=true;return;}
+  m.hidden=false;m.className='notice'+((S.msgErr||S.connLost)?' err':'');m.textContent=text;
+}
+function hostMode(){return S.role==='host'&&!S.audienceView;}
+function renderRoomBar(){
+  var bar=$('roombar');
+  bar.replaceChildren();
+  if(S.role==='guest'){
+    bar.append(h('div',{class:'codebox'},h('div',{class:'label',text:'Room'}),h('div',{class:'code-mid',text:S.jc})),
+      h('button',{class:'btn small',type:'button',onclick:leave,text:'Leave room'}));
+    return;
+  }
+  var jc=S.data?S.data.joinCode:'····';
+  var link=location.origin+'/#'+jc;
+  bar.append(
+    h('div',{class:'codebox'},h('div',{class:'label',text:'Guest code'}),
+      h('div',{class:'row'},h('div',{class:'code-big',text:jc}),
+        h('button',{class:'btn small',type:'button',onclick:function(e){copy(link,e.target);},text:'Copy link'}))),
+    h('div',{class:'codebox'},h('div',{class:'label',text:'Host code (keep private)'}),
+      h('div',{class:'row'},h('div',{class:'code-mid',text:S.showHostCode?S.hc:'••••••'}),
+        h('button',{class:'btn small',type:'button',onclick:function(){S.showHostCode=!S.showHostCode;renderRoomBar();},text:S.showHostCode?'Hide':'Show'}))),
+    h('div',{class:'actions'},
+      h('button',{class:'btn small',type:'button',onclick:function(){S.audienceView=!S.audienceView;renderAll();},text:S.audienceView?'Back to host view':'Preview as guest'}),
+      h('button',{class:'btn small',type:'button',onclick:leave,text:'Leave room'})));
+  if(S.justCreated){
+    bar.append(h('div',{class:'notice key',style:'flex-basis:100%'},
+      h('div',{},'Save your host code: ',h('b',{class:'mono',text:S.hc}),'. It is the only way back into this room, so write it down or take a screenshot.'),
+      h('div',{class:'actions'},h('button',{class:'btn small primary',type:'button',onclick:function(){S.justCreated=false;S.showHostCode=false;renderRoomBar();},text:'I saved it'}))));
+  }
+}
+function tierBars(counts){
+  var max=Math.max(1,Math.max.apply(null,TIERS.map(function(t){return (counts&&counts[t])||0;})));
+  return h('div',{class:'bars'},TIERS.map(function(t){
+    var n=(counts&&counts[t])||0;
+    var fill=h('div',{class:'bar-fill',tc:t});fill.style.width=(n/max*100)+'%';
+    return h('div',{class:'bar-row'},h('div',{class:'bar-tier',tc:t,text:t}),h('div',{class:'bar-track'},fill),h('div',{class:'bar-n mono',text:String(n)}));
+  }));
+}
+function imgUrl(b){return '/api/join/'+S.data.joinCode+'/img/'+b.id+'?v='+b.img;}
+function renderVote(){
+  var p=$('vote-panel');
+  var showIt=!hostMode();
+  p.hidden=!showIt;
+  if(!showIt)return;
+  p.replaceChildren();
+  if(!S.data){put(p,h('div',{class:'muted',text:'Connecting…'}));return;}
+  var b=curItem(),preview=S.role==='host';
+  if(preview)put(p,h('div',{class:'notice',text:'Guest preview. Voting is turned off here.'}));
+  if(!b){
+    put(p,h('div',{class:'vote-name',text:'No poll is open right now'}),
+      h('div',{class:'muted',text:'Voting opens when the host starts a poll. This page updates by itself.'}));
+    return;
+  }
+  var img=b.img?h('img',{class:'vote-img',src:imgUrl(b),alt:b.name}):null;
+  if(S.data.live.open){
+    var mine=myPick(b.id);
+    put(p,h('div',{class:'label'},h('span',{class:'pill open',text:'POLL OPEN'})),
+      h('div',{class:'vote-name',text:b.name}),img,
+      h('div',{class:'muted',text:'Where does it rank?'+(mine?' You can change your vote until the poll closes.':'')}),
+      h('div',{class:'tier-grid'+(mine?' has-pick':''),role:'group','aria-label':'Pick a tier'},TIERS.map(function(t){
+        return h('button',{class:'tier-btn',type:'button',tc:t,'aria-pressed':mine===t?'true':'false',disabled:preview||null,
+          onclick:function(){vote(t);},text:t});
+      })),
+      mine?h('div',{class:'mono',text:'Your vote: '+mine}):null);
+  }else{
+    var n=b.votes||0,mine2=myPick(b.id);
+    put(p,h('div',{class:'label'},h('span',{class:'pill',text:'POLL CLOSED'})),
+      h('div',{class:'vote-name',text:b.name}),img,
+      b.final?h('div',{class:'result-tier',tc:b.final,text:b.final+' tier'}):h('div',{class:'muted',text:'No votes came in.'}),
+      b.counts?tierBars(b.counts):null,
+      h('div',{class:'muted mono',text:n+' vote'+(n===1?'':'s')+(mine2?' · you voted '+mine2:'')}));
+  }
+}
+function renderConsole(){
+  var box=$('console');
+  box.replaceChildren();
+  $('host-area').hidden=!hostMode();
+  if(!hostMode()||!S.data)return;
+  var d=S.data,b=curItem(),open=!!(d.live.open&&b),nxt=nextItem();
+  box.append(h('div',{class:'label',text:'Current poll'}));
+  if(b){
+    var counts=open?(d.tally?d.tally.c:null):b.counts,n=open?(d.tally?d.tally.n:0):(b.votes||0);
+    box.append(h('div',{class:'now'},
+      h('div',{class:'now-head'},
+        b.img?h('img',{class:'now-img',src:imgUrl(b),alt:''}):null,
+        h('div',{style:'min-width:0;display:flex;flex-direction:column;gap:6px'},
+          h('span',{class:'pill'+(open?' open':''),text:open?'POLL OPEN':'POLL CLOSED'}),
+          h('div',{class:'now-name',text:b.name}))),
+      tierBars(counts),
+      h('div',{class:'mono muted',text:n+' vote'+(n===1?'':'s')+(open?' so far':'')+(!open&&b.final?' · placed in '+b.final:'')})));
+  }else{
+    box.append(h('div',{class:'muted',text:d.items.length?'No poll is open. Start with the first item below.':'Add your items below to get started.'}));
+  }
+  var acts=h('div',{class:'actions'});
+  if(open)acts.append(h('button',{class:'btn primary',type:'button',disabled:S.busy||null,onclick:function(){act({type:'close'});},text:'Close poll'}));
+  else acts.append(h('button',{class:'btn primary',type:'button',disabled:(S.busy||!nxt)||null,onclick:function(){act({type:'open',id:nxt.id});},
+    text:nxt?'Open poll: '+nxt.name:'All items ranked'}));
+  box.append(acts);
+}
+function renderQueue(){
+  var ol=$('queue');
+  ol.replaceChildren();
+  if(!hostMode()||!S.data)return;
+  var d=S.data;
+  if(!d.items.length){ol.append(h('li',{class:'empty',text:'No items yet. Add some below.'}));return;}
+  d.items.forEach(function(b,i){
+    var live=d.live.itemId===b.id&&d.live.open;
+    var title=h('div',{class:'q-title'},h('span',{class:'q-name',text:b.name}),
+      live?h('span',{class:'pill open',text:'OPEN'}):(b.final?h('span',{class:'tag',tc:b.final,text:b.final}):h('span',{class:'pill',text:'QUEUED'})));
+    var sel=h('select',{'aria-label':'Set tier for '+b.name,disabled:S.busy||null,onchange:function(e){act({type:'final',id:b.id,tier:e.target.value});}},
+      h('option',{value:'',text:'Tier…'}),
+      TIERS.map(function(t){var o=h('option',{value:t,text:t});if(b.final===t)o.selected=true;return o;}));
+    var acts=h('div',{class:'q-actions'},
+      h('button',{class:'btn small'+((live||b.final)?'':' primary'),type:'button',disabled:(S.busy||live)||null,
+        onclick:function(){act({type:'open',id:b.id});},text:live?'Open':(b.final?'Reopen':'Open poll')}),
+      h('button',{class:'btn small',type:'button',disabled:S.busy||null,onclick:function(){pickPhoto(b);},text:b.img?'Change photo':'Add photo'}),
+      b.final?sel:null,
+      h('button',{class:'btn small danger',type:'button',disabled:(S.busy||live)||null,onclick:function(){removeItem(b.id);},
+        text:S.confirmRemove===b.id?'Confirm remove':'Remove'}));
+    ol.append(h('li',{class:'q-row'+(live?' live':'')},
+      h('span',{class:'q-no mono',text:String(i+1).padStart(2,'0')}),
+      b.img?h('img',{class:'q-thumb',src:imgUrl(b),alt:''}):h('div',{class:'q-thumb'}),
+      h('div',{class:'q-main'},title,acts)));
+  });
+}
+function renderBoard(){
+  var box=$('board');
+  box.replaceChildren();
+  var all=S.data?S.data.items:[];
+  TIERS.forEach(function(t){
+    var placed=all.filter(function(b){return b.final===t;});
+    box.append(h('div',{class:'t-row'},
+      h('div',{class:'t-label',tc:t,text:t}),
+      h('div',{class:'t-items'},placed.length?placed.map(function(b){
+        return h('span',{class:'chip'+(b.img?'':' noimg')},b.img?h('img',{src:imgUrl(b),alt:''}):null,h('span',{text:b.name}));
+      }):h('span',{class:'empty',text:'Nothing here yet'}))));
+  });
+  if(all.length){
+    var left=all.filter(function(b){return !b.final;}).length;
+    box.append(h('div',{class:'muted mono',style:'font-size:.85rem;padding-top:4px',text:left+' of '+all.length+' still to rank'}));
+  }
+}
+
+/* ---------- wiring ---------- */
+function codeInput(id,len){
+  var el=$(id);
+  el.addEventListener('input',function(){el.value=el.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,len);});
+}
+function init(){
+  codeInput('host-code',6);codeInput('join-code',4);
+  $('go-host').addEventListener('click',function(){
+    var last=store('btp_host');if(last&&/^[A-Z0-9]{6}$/.test(last))$('host-code').value=last;
+    setFormMsg('host-msg','');show('hostmenu');
+  });
+  $('go-join').addEventListener('click',function(){
+    var last=store('btp_join');if(last&&/^[A-Z0-9]{4}$/.test(last)&&!$('join-code').value)$('join-code').value=last;
+    setFormMsg('join-msg','');show('join');
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.back'),function(b){b.addEventListener('click',function(){show('home');});});
+  $('new-room').addEventListener('click',async function(e){
+    e.target.disabled=true;setFormMsg('host-msg','');
+    try{
+      var r=await api('POST','/api/rooms',{name:$('new-name').value.trim()});
+      S.justCreated=true;enterHost(r.hostCode);S.showHostCode=true;renderRoomBar();
+    }catch(err){setFormMsg('host-msg',err.message);}
+    e.target.disabled=false;
+  });
+  $('host-form').addEventListener('submit',async function(e){
+    e.preventDefault();
+    var c=$('host-code').value;
+    if(c.length!==6){setFormMsg('host-msg','Host codes have 6 characters.');return;}
+    try{await api('GET','/api/host/'+c+'/check');setFormMsg('host-msg','');enterHost(c);}
+    catch(err){setFormMsg('host-msg',err.message);}
+  });
+  $('join-form').addEventListener('submit',async function(e){
+    e.preventDefault();
+    var c=$('join-code').value;
+    if(c.length!==4){setFormMsg('join-msg','Room codes have 4 characters.');return;}
+    try{await api('GET','/api/join/'+c+'/check');setFormMsg('join-msg','');enterGuest(c);}
+    catch(err){setFormMsg('join-msg',err.message);}
+  });
+  $('room-name').addEventListener('input',function(){nameDirty=true;});
+  $('name-form').addEventListener('submit',function(e){
+    e.preventDefault();
+    act({type:'rename',name:$('room-name').value.trim()}).then(function(){if(!S.msgErr)nameDirty=false;});
+  });
+  $('add-btn').addEventListener('click',addItems);
+  $('file-btn').addEventListener('click',function(){$('file-input').click();});
+  $('file-input').addEventListener('change',function(e){
+    var f=e.target.files&&e.target.files[0];if(!f)return;
+    var r=new FileReader();
+    r.onload=function(){
+      var csv=/\.csv$/i.test(f.name);
+      var lines=String(r.result).split(/\r?\n/).map(function(l){return csv?l.split(',')[0].replace(/^"|"$/g,''):l;});
+      var ta=$('item-input');ta.value=(ta.value?ta.value.replace(/\s*$/,'')+'\n':'')+lines.join('\n');
+    };
+    r.readAsText(f);e.target.value='';
+  });
+  var m=/^#([A-Za-z0-9]{4})$/.exec(location.hash);
+  if(m){$('join-code').value=m[1].toUpperCase();show('join');}
+  else show('home');
+}
+init();
+})();
+</script>
+</body>
+</html>
