@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Tier Poll results</title>
+<style>
+/* Read-only results screen. The page background is transparent so OBS can layer it over video. */
+:root{
+  --t-S:#ec5b5f; --t-A:#f2933a; --t-B:#ecc81f; --t-C:#68bf6b; --t-D:#45a6dc; --t-E:#9a82e0; --t-F:#9aa4b4;
+  --on-tier:#101820;
+  --card:#2a2f37; --fg:#ffffff; --muted:#b4c0d2; --line:rgba(255,255,255,.18);
+  font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#2a2f37;color:var(--fg);font-family:inherit}
+[hidden]{display:none!important}
+/* Fixed 1920x500 banner, scaled to fit any browser source size. The whole viewport is solid, with no transparent edges. */
+#stage{position:absolute;left:50%;top:50%;width:1920px;height:500px;transform-origin:center center;transform:translate(-50%,-50%) scale(var(--s,1))}
+.card{position:absolute;inset:0;background:#2a2f37;padding:40px 64px;display:grid;grid-template-columns:minmax(360px,max-content) 1fr;gap:64px}
+.left{max-width:760px;display:flex;flex-direction:column;justify-content:center;gap:14px;min-width:0}
+.room{font-size:32px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status{align-self:flex-start;font-weight:700;font-size:34px;letter-spacing:.04em;text-transform:uppercase;padding:6px 28px;border-radius:999px;background:#0a63ff;color:#fff}
+.status.closed{background:rgba(255,255,255,.18)}
+.status.idle{background:transparent;border:2px solid var(--line);color:var(--muted)}
+.item{display:flex;gap:24px;align-items:center;min-width:0}
+.pic{width:130px;height:130px;flex:none;object-fit:cover;border-radius:20px;border:2px solid var(--line)}
+.name{font-weight:800;font-size:112px;line-height:1.02;overflow-wrap:anywhere;min-width:0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.name.mid{font-size:76px}
+.name.long{font-size:52px}
+.right{display:grid;grid-template-columns:400px 1fr;gap:48px;min-width:0;min-height:0}
+.result{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border-radius:44px;background:var(--tc,rgba(255,255,255,.08));color:var(--on-tier);font-weight:800}
+.result .big{font-size:230px;line-height:1}
+.result .sm{font-size:38px;font-weight:700}
+.result.none{color:var(--muted);border:2px dashed var(--line)}
+.result.none .big{font-size:150px}
+.bars{display:flex;flex-direction:column;justify-content:space-between;min-height:0}
+.bar{display:grid;grid-template-columns:64px 1fr 80px;gap:22px;align-items:center;font-size:34px;flex:1}
+.bar .t{font-weight:800;text-align:center;background:var(--tc);color:var(--on-tier);border-radius:12px;line-height:1.25}
+.bar .track{height:28px;border-radius:14px;background:rgba(255,255,255,.12);overflow:hidden}
+.bar .fill{height:100%;width:0;background:var(--tc)}
+.bar .n{text-align:right;font-variant-numeric:tabular-nums}
+.total{font-size:32px;color:var(--muted);font-variant-numeric:tabular-nums;padding-top:6px}
+.banner{grid-column:1/-1;display:flex;align-items:center;justify-content:center;font-size:104px;font-weight:700;font-style:italic;text-align:center;line-height:1.1}
+.banner.sm{font-size:72px;color:var(--muted)}
+sup,sub{line-height:0}
+@media (prefers-reduced-motion:no-preference){.fill{transition:width .25s ease}}
+</style>
+</head>
+<body>
+<div id="stage"><main class="card" id="card" aria-live="polite"></main></div>
+<script>
+(function(){
+'use strict';
+var TIERS=['S','A','B','C','D','E','F'];
+var token=location.pathname.split('/').filter(Boolean)[1]||'';
+var card=document.getElementById('card');
+var ALLOW={B:'b',STRONG:'b',I:'i',EM:'i',U:'u',S:'s',STRIKE:'s',DEL:'s',SUP:'sup',SUB:'sub'};
+function rich(html){
+  var f=document.createDocumentFragment();
+  var src=new DOMParser().parseFromString('<!doctype html><body>'+(html||''),'text/html').body;
+  (function walk(a,dst){
+    a.childNodes.forEach(function(n){
+      if(n.nodeType===3)dst.appendChild(document.createTextNode(n.nodeValue));
+      else if(n.nodeType===1){
+        if(ALLOW[n.nodeName]){var e=document.createElement(ALLOW[n.nodeName]);dst.appendChild(e);walk(n,e);}
+        else walk(n,dst);
+      }
+    });
+  })(src,f);
+  return f;
+}
+function h(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
+function bars(counts){
+  var max=Math.max(1,Math.max.apply(null,TIERS.map(function(t){return counts[t]||0;})));
+  var box=h('div','bars');
+  TIERS.forEach(function(t){
+    var n=counts[t]||0,row=h('div','bar'),fill=h('div','fill');
+    row.style.setProperty('--tc','var(--t-'+t+')');
+    fill.style.width=(n/max*100)+'%';
+    var track=h('div','track');track.appendChild(fill);
+    row.append(h('div','t',t),track,h('div','n',String(n)));
+    box.appendChild(row);
+  });
+  return box;
+}
+function fit(){document.documentElement.style.setProperty('--s',Math.min(innerWidth/1920,innerHeight/500));}
+addEventListener('resize',fit);fit();
+function draw(v){
+  card.replaceChildren();
+  var left=h('div','left'),right=h('div','right');
+  card.append(left,right);
+  if(v.off){left.append(h('div','status idle','Link off'));right.append(h('div','banner sm','This results link has been turned off.'));return;}
+  left.append(h('div','room',v.room||''));
+  if(!v.item){left.append(h('div','status idle','Standing by'));right.append(h('div','banner sm','Waiting for the next poll\u2026'));return;}
+  var open=v.state==='open';
+  left.append(h('div','status'+(open?'':' closed'),open?'Polls open':'Polls closed'));
+  var nm=h('div','name');nm.appendChild(rich(v.item.name));
+  var len=(nm.textContent||'').length;
+  if(len>40)nm.className+=' long';else if(len>9)nm.className+=' mid';
+  var item=h('div','item');
+  if(v.item.img){var im=h('img','pic');im.alt='';im.src='/api/display/'+token+'/img/'+v.item.id+'?v='+v.item.img;item.appendChild(im);}
+  item.appendChild(nm);left.appendChild(item);
+  if(v.revealed&&v.counts){
+    var res;
+    if(!open&&v.final){res=h('div','result');res.style.setProperty('--tc','var(--t-'+v.final+')');res.append(h('div','big',v.final),h('div','sm','tier'));}
+    else{res=h('div','result none');res.append(h('div','big','?'),h('div','sm',open?'Voting now':'No votes'));}
+    var col=h('div'),n=v.votes||0;col.style.cssText='display:flex;flex-direction:column;min-height:0';
+    var bs=bars(v.counts);bs.style.flex='1';
+    col.append(bs,h('div','total',n+' vote'+(n===1?'':'s')+(open?' so far':'')));
+    right.append(res,col);
+  }else{
+    right.append(h('div','banner'+(open?'':' sm'),open?'Polls are open!':'Polls are closed. Results coming up\u2026'));
+  }
+}
+function name(v){v.room=v.name?new DOMParser().parseFromString('<body>'+v.name,'text/html').body.textContent:'';return v;}
+draw({item:null,room:''});
+var es=new EventSource('/api/display/'+encodeURIComponent(token)+'/events');
+es.onmessage=function(ev){try{draw(name(JSON.parse(ev.data)));}catch(e){}};
+es.onerror=function(){
+  // A 404 (link turned off) ends the stream; show that instead of looping silently.
+  fetch('/api/display/'+encodeURIComponent(token)+'/img/x').then(function(r){
+    if(r.status===404){r.json().catch(function(){return {};}).then(function(j){if(j&&j.error){es.close();draw({off:true});}});}
+  }).catch(function(){});
+};
+})();
+</script>
+</body>
+</html>
