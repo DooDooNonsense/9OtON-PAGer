@@ -1,0 +1,76 @@
+const { chromium } = require('playwright');
+const B='http://localhost:3122', SP=process.argv[2];
+const j=async(m,u,b)=>{const r=await fetch(B+u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});return r.json().catch(()=>({}));};
+const snap=(u)=>new Promise(ok=>{require('http').get(B+u,res=>{let buf='';res.on('data',d=>{buf+=String(d);const m=/data: (.*)\n/.exec(buf);if(m){res.destroy();ok(JSON.parse(m[1]));}});});});
+let fails=0;const ok=(c,m)=>{console.log((c?'PASS ':'FAIL ')+m);if(!c)fails++;};
+(async()=>{
+  const r=await j('POST','/api/rooms',{name:'Alpha'});const H=r.hostCode,J=r.joinCode;
+  const act=a=>j('POST','/api/host/'+H+'/action',a);
+  await act({type:'cfg',shuffle:false,timer:6,desc:'<b>Bold</b> intro\n- <i>one</i>\n- two'});
+  await act({type:'add',items:['Aa','Bb','Cc']});
+  let hv=await snap('/api/host/'+H+'/events');const it=n=>hv.items.find(b=>b.name===n);
+  hv=await snap('/api/host/'+H+'/events');
+  ok(hv.cfg.hostPlay===false,'Play Along defaults off');
+  ok(hv.cfg.desc.includes('<b>Bold</b>'),'rich description stored');
+  await act({type:'edit',id:it('Aa').id,rc:{kind:'trivia',qs:[{id:'q1',q:'Pick B',opts:['x','y','z','w'],correct:1,expl:'because'}]}});
+  const br=await chromium.launch({executablePath:process.env.CHROME||'/usr/bin/google-chrome',args:['--no-sandbox']});
+  const errs=[];
+  const mk=async(n,vp)=>{const p=await br.newPage({viewport:vp});p.on('pageerror',e=>errs.push(n+' '+e));p.on('console',m=>{if(m.type()==='error'&&!/40\d/.test(m.text()))errs.push(n+' '+m.text());});return p;};
+  const p=await mk('host',{width:1400,height:900});await p.goto(B+'/host#'+H);await p.waitForSelector('.qcircle');
+  const g=await mk('guest',{width:390,height:800});await g.goto(B+'/play#'+J);
+  await g.waitForSelector('.gate input');
+  ok((await g.locator('.gate .desc').count())===0,'no description on name gate');
+  await g.fill('.gate input[aria-label="Your name"]','Pat');await g.fill('.gate input[aria-label="Password"]','test1234');await g.click('.gate button[type=submit]');await g.waitForSelector('.pcard.center');
+  await g.waitForSelector('.pcard .desc');
+  ok((await g.locator('.pcard .desc b').count())===1&&(await g.locator('.pcard .desc li i').count())===1,'rich description + bullets render for guest lobby');
+  // poll: 1 guest vote B, host not voting -> bar fill share
+  await p.click('button:has-text("Start Poll")');
+  ok((await p.locator('.card .desc').count())===0,'no description on host poll card');
+  await g.waitForSelector('.tier-btn');ok((await g.locator('.pcard .desc').count())===1,'description while polling');
+  await g.click('.tier-btn >> nth=1');
+  await g.waitForSelector('.lockbtn:has-text("Lock It In")');ok((await g.locator('.pcard .desc').count())===1,'description after voting while open');
+  await p.click('button:has-text("Close poll")');
+  await g.waitForSelector('text=Waiting for the host to reveal');ok((await g.locator('.pcard .desc').count())===0,'no description once closed');
+  await p.click('button:has-text("Reveal Results?")');await p.waitForSelector('.res-bars');await p.waitForTimeout(1500);
+  const ws=await p.locator('.res-fill').evaluateAll(es=>es.map(e=>Math.round(e.getBoundingClientRect().width/e.parentElement.getBoundingClientRect().width*100)));
+  ok(ws[1]===100&&ws[0]===0,'single vote fills its own bar only to its share (1 of 1) '+ws);
+  await g.waitForSelector('text=the room placed it in');ok((await g.locator('.pcard .desc').count())===0,'no description on guest result');
+  await p.click('button:has-text("Continue")');await p.waitForSelector('.rchip');
+  // trivia with Play Along off
+  await p.waitForSelector('.tprompt');await p.click('.tprompt button:has-text("Yes")');
+  await p.waitForSelector('.tstage .opt-btn',{timeout:15000});
+  ok((await p.locator('.tstage .opt-btn:not([disabled])').count())===0,'host cannot answer when Play Along is off');
+  ok((await p.locator('.tstage button:has-text("Lock in")').count())===0,'host has no Lock in');
+  await g.waitForSelector('.opt-btn');await g.click('.opt-btn >> nth=0');await g.click('button:has-text("Lock in")');
+  await p.waitForSelector('button:has-text("Reveal Answer")',{timeout:5000});ok(true,'timer ends itself when everyone is locked in');
+  ok((await p.locator('.tstage .hostchip').count())===0,'no HOST chip when not playing');
+  await p.click('button:has-text("Reveal Answer")');await p.waitForTimeout(1200);
+  const okBorder=await p.locator('.bar-opt.ok').count();ok(okBorder===1,'correct answer bordered green even with zero picks');
+  ok((await p.locator('.bar-opt.ok .bf').evaluate(e=>e.getBoundingClientRect().width))<2,'zero-pick correct has empty bar');
+  ok((await p.locator('.tstage .fb').count())===0,'no host right/wrong feedback when not playing');
+  await p.screenshot({path:SP+'/p1.png'});
+  await (async()=>{const m=p.locator('.morepill');if(await m.count())await m.click();await p.waitForTimeout(1500);})();
+  await p.click('button:has-text("Done")');
+  // Advanced: Play Along toggle + greyed Host Score
+  await p.click('#gear-btn');await p.click('.gm-tab:has-text("Advanced")');
+  ok(await p.locator('[data-k=hostscore]').isDisabled(),'Host Score greyed while Play Along off');
+  await p.click('.grow-row:has([data-k=hostplay]) .sw-track');await p.waitForFunction(()=>!document.querySelector('[data-k=hostscore]').disabled);ok(true,'Host Score enabled with Play Along');
+  await p.screenshot({path:SP+'/p2.png'});
+  // customize rich description
+  await p.click('.gm-tab:has-text("Customize")');
+  ok((await p.locator('.gm .rt-bar').count())>=2,'description has the formatting toolbar');
+  await p.screenshot({path:SP+'/p3.png'});
+  // inline remove
+  await p.click('.gm-tab:has-text("Items")');
+  await p.waitForSelector('.rm');
+  const row=p.locator('.item-row').filter({hasText:'Cc'});
+  await row.locator('.rm').click();ok((await row.locator('.rm').textContent()).trim()==='Remove','X expands to Remove');
+  await p.screenshot({path:SP+'/p4.png'});
+  await row.locator('.rm').click();ok((await row.locator('.rm').textContent()).trim()==='Confirm','Remove becomes Confirm');
+  await p.click('.gm h3:has-text("Items:")');await p.waitForTimeout(200);
+  ok((await row.locator('.rm').textContent()).trim()==='','click elsewhere returns it to X');
+  await row.locator('.rm').click();await row.locator('.rm').click();await row.locator('.rm').click();
+  await p.waitForFunction(()=>![...document.querySelectorAll('.item-name')].some(e=>e.textContent.includes('Cc')));ok(true,'third click removes the item');
+  console.log('ERRS',errs);console.log(fails?'FAILS '+fails:'ALL PASS');
+  await br.close();
+})().catch(e=>{console.error('ERR',e.message);process.exit(1);});
