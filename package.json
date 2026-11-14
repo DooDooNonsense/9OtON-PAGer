@@ -1,9 +1,0 @@
-{
-  "name": "tier-poll",
-  "version": "1.0.0",
-  "description": "Impollster: multiplayer tier polls with room codes",
-  "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" },
-  "license": "MIT"
-}
